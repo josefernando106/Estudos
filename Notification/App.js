@@ -1,123 +1,165 @@
-import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Button } from 'react-native';
+import { useEffect, useState } from 'react'
+import { View, Text, StyleSheet, Button } from 'react-native'
+
 import notifee, {
-    AuthorizationStatus,
-    EventType,
-    AndroidImportance,
-    TriggerType
-    
-} from '@notifee/react-native';
+  AuthorizationStatus,
+  EventType,
+  AndroidImportance,
+  TriggerType,
+  TimestampTrigger
+} from '@notifee/react-native'
+
+export default function App(){
+  const [statusNotification, setStatusNotification] = useState(true);
+
+  useEffect(() => {
+    async function getPermission(){
+      const settings = await notifee.requestPermission();
+      if(settings.authorizationStatus >= AuthorizationStatus.AUTHORIZED){
+        console.log("Permission: ", settings.authorizationStatus)
+        setStatusNotification(true);
+      }else{
+        console.log("Usuario negou a permissao!")
+        setStatusNotification(false);
+      }
+
+      
+    }
+
+    getPermission();
+
+  }, [])
 
 
+  notifee.onBackgroundEvent(async ({ type, detail }) => {
+    const { notification, pressAction } = detail;
 
-export default function App() {
-    const [statusNotification, setStatusNotification] = useState(true);
+    if(type === EventType.PRESS){
+      console.log("TOCOU NA NOTIFICACAO BACKGROUND: ", pressAction?.id)
+      if(notification?.id){
+        await notifee.cancelNotification(notification?.id)
+      }
 
-    useEffect(() => {
-        async function getPermission() {
-            const authStatus = await notifee.requestPermission();
-            if (authStatus.authorizationStatus >= AuthorizationStatus.AUTHORIZED) {
-                console.log('Permitiu', authStatus.authorizationStatus);
-                setStatusNotification(true)
-            } else {
-                console.log('Usuario negou a permissão');
-                setStatusNotification(true)
-            }
-        }
+    }
 
-        getPermission();
-    }, []);
+    console.log("EVENT BACKGROUND")
 
-    notifee.onBackgroundEvent( async ({ type, detail }) => {
-        const { notification, pressAction } = detail;
-        if(type == EventType.PRESS) {
-            console.log('Notificação pressionada no background', pressAction?.id);
-            if(notification?.id){
-                await notifee.cancelNotification(notification.id);
-            }
-        }
-        console.log('Notificação recebida no background');
+  } )
+
+
+  useEffect(() => {
+    return notifee.onForegroundEvent(({ type, detail }) => {
+      switch(type){
+        case EventType.DISMISSED:
+          console.log("USUARIO DESCARTOU A NOTIFICACAO")
+          break;
+        case EventType.PRESS:
+          console.log("TOCOU: ", detail.notification)
+          console.log("Title ", detail.notification?.title)
+          console.log("Corpo ", detail.notification?.body)
+      }
     })
-    useEffect(() => {
-        return notifee.onForegroundEvent(({ type, detail }) => {
-            switch (type) {
-                case EventType.PRESS:
-                    console.log('Tocou', detail.notification);
-                    break;
-                case EventType.DISMISSED:
-                    console.log('Usuario descartou a notificação', detail.notification);
-                    break;
-                // default:
-                //   console.log('Unhandled event type:', type);
-            }
-        });
-    }, [])
+  }, [])
 
-    async function handleNotification() {
-        if (!statusNotification) {
-            console.log('Notificação não permitida');
-            return;
-        }
-        const channelId = await notifee.createChannel({
-            id: 'lembrete',
-            name: 'Lembrete',
-            vibration: true,
-            importance: AndroidImportance.HIGH,
-        });
 
-        await notifee.displayNotification({
-            title: 'Lembrete',
-            body: 'Lembrete para estudar reactive-native amanhã',
-            android: {
-                channelId,
-                pressAction: {
-                    id: 'default',
-                },
-            },
-        })
 
+  async function handleNotificate(){
+    if(!statusNotification){
+      return;
     }
-    async function handleScheduleNotification() {
-        const date = new Date(Date.now())
 
-        date.setMinutes(date.getMinutes() + 1);
+    const channelId = await notifee.createChannel({
+      id: 'lembrete',
+      name: 'lembrete',
+      vibration: true,
+      importance: AndroidImportance.HIGH
+    })
 
-        const trigger = {
-            type: TriggerType.TIMESTAMP,
-            timestamp: date.getTime(),
+    await notifee.displayNotification({
+      id: 'lembrete',
+      title: 'Estudar programaçao!',
+      body: 'Lembrete para estudar react-native amanha!',
+      android:{
+        channelId,
+        pressAction: {
+          id: 'default'
         }
-        await notifee.createTriggerNotification({
-            title: 'Lembrete',
-            body: 'Estudar JavaScript',
-            android: {
-                channelId: 'lembrete',
-                importance: AndroidImportance.HIGH,
-                pressAction: {
-                    id: 'default',
-                },
-            },
-        }, trigger);
+      }
+    })
 
-        console.log('Notificação agendada para', date);
+  }
 
+
+  async function handleScheduleNotification(){
+    const date = new Date(Date.now());
+
+    date.setMinutes(date.getMinutes() + 1);
+
+    const trigger: TimestampTrigger = {
+      type: TriggerType.TIMESTAMP,
+      timestamp: date.getTime()
     }
-    return (
-        <View style={styles.container}>
-            <Text>Welcome to the Notification App!</Text>
-            <Button
-                title='Enviar Notificação'
-                onPress={handleNotification} />
-            <Button
-                title='Agendar Notificação'
-                onPress={handleScheduleNotification} />
-        </View>
-    );
+
+    const notification = await notifee.createTriggerNotification({
+      title: "Lembrete Estudo",
+      body: "Estudar JavaScript as 15:30",
+      android:{
+        channelId: 'lembrete',
+        importance: AndroidImportance.HIGH,
+        pressAction: {
+          id: 'default',
+        }
+      }
+    }, trigger)
+
+
+    console.log("Notification agendada: ",notification)
+  }
+
+
+  function handleListNotifications(){
+    notifee.getTriggerNotificationIds()
+    .then((ids) => {
+      console.log(ids)
+    })
+  }
+
+  async function handleCancelNotification(){
+    await notifee.cancelNotification("0xmUraKUfElFvtLuRTJY")
+    console.log("Notificaçao cancelada com sucesso!")
+  }
+
+
+  return(
+    <View style={styles.container}>
+      <Text>Notificaçoes App</Text>
+      <Button
+        title="Enviar notificaçao"
+        onPress={handleNotificate}
+      />
+
+      <Button
+        title="Agendar notificaçao"
+        onPress={handleScheduleNotification}
+      />
+
+      <Button
+        title="Listar notificacoes"
+        onPress={handleListNotifications}
+      />
+
+      <Button
+        title="Cancelar Notificaçao"
+        onPress={handleCancelNotification}
+      />
+    </View>
+  )
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center'
-    }
+  container:{
+    flex:1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  }
 })
